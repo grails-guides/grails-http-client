@@ -1,0 +1,12 @@
+grails:
+  plugin:
+    databasemigration:
+      updateOnStart: false
+
+dataSource:
+  url: jdbc:tc:postgresql:16:///postgres
+  driverClassName: org.testcontainers.jdbc.ContainerDatabaseDriver
+  dbCreate: create-drop
+
+hibernate:
+  dialect: org.hibernate.dialect.PostgreSQLDialect

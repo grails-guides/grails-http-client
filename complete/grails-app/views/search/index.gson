@@ -1,0 +1,17 @@
+import example.Album
+
+model {
+    String searchTerm
+    List<Album> albums
+}
+
+json {
+    searchTerm searchTerm
+    albums albums.collect { Album album ->
+        [
+            artistName: album.artistName,
+            collectionName: album.collectionName,
+            collectionViewUrl: album.collectionViewUrl
+        ]
+    }
+}

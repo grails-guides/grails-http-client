@@ -1,0 +1,10 @@
+import example.RecordLabel
+
+model {
+    RecordLabel recordLabel
+}
+
+json {
+    id recordLabel.id
+    name recordLabel.name
+}

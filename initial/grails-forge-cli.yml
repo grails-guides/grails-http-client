@@ -1,0 +1,7 @@
+# Document how this app was generated (re-run when Forge/CLI is available):
+# grails create-app example --profile=rest-api --inplace
+#   -f postgres,database-migration,views-json,testcontainers
+applicationType: rest-api
+defaultPackage: example
+name: example
+grailsVersion: 8.0.0-SNAPSHOT

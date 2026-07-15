@@ -1,0 +1,7 @@
+import example.RecordLabel
+
+model {
+    RecordLabel recordLabel
+}
+
+json g.render(recordLabel, [includes: ['id', 'name']])
