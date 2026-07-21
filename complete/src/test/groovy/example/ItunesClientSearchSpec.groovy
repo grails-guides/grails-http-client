@@ -1,53 +1,49 @@
 package example
 
-import grails.gorm.transactions.Rollback
-import grails.testing.mixin.integration.Integration
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.RecordedRequest
-import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.test.context.DynamicPropertyRegistry
-import org.springframework.test.context.DynamicPropertySource
+import org.springframework.http.converter.json.JacksonJsonHttpMessageConverter
+import org.springframework.web.client.RestClient
+import org.springframework.web.client.support.RestClientAdapter
+import org.springframework.web.service.invoker.HttpServiceProxyFactory
 import spock.lang.Specification
 
-@Integration
-@Rollback
-class ItunesClientIntegrationSpec extends Specification {
+class ItunesClientSearchSpec extends Specification {
 
-    static MockWebServer mockWebServer = new MockWebServer()
+    MockWebServer mockWebServer = new MockWebServer()
 
-    static {
+    def setup() {
         mockWebServer.start()
     }
 
-    @Autowired
-    ItunesClient itunesClient
+    def cleanup() {
+        mockWebServer.shutdown()
+    }
 
-    @DynamicPropertySource
-    static void itunesBaseUrl(DynamicPropertyRegistry registry) {
+    private ItunesClient client() {
         String baseUrl = mockWebServer.url('/').toString()
         if (baseUrl.endsWith('/')) {
             baseUrl = baseUrl[0..-2]
         }
-        registry.add('itunes.base-url', { baseUrl })
-    }
-
-    void cleanupSpec() {
-        mockWebServer.shutdown()
-    }
-
-    void 'declarative ItunesClient HTTP service is registered as a Spring bean'() {
-        expect:
-        itunesClient != null
-        itunesClient instanceof ItunesClient
+        RestClient restClient = RestClient.builder()
+                .baseUrl(baseUrl)
+                .messageConverters { converters ->
+                    converters.add(0, new JacksonJsonHttpMessageConverter())
+                }
+                .build()
+        HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(ItunesClient)
     }
 
     void 'search binds the term query parameter and deserializes albums'() {
         given:
         String searchTerm = 'U2 & Friends'
         mockWebServer.enqueue(new MockResponse()
-                .setHeader('Content-Type', 'text/javascript; charset=utf-8')
+                .setHeader('Content-Type', 'application/json')
                 .setBody('''{"resultCount":1,"results":[{"artistName":"U2","collectionName":"The Joshua Tree","collectionViewUrl":"https://example.com/album"}]}'''))
+        ItunesClient itunesClient = client()
 
         when:
         SearchResult result = itunesClient.search(searchTerm)

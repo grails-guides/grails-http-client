@@ -2,16 +2,16 @@
 
 Sample app for **Calling REST APIs with Spring HTTP Services in Grails 8** (Apache Grails `8.0.0-SNAPSHOT`, JDK 21).
 
-The guide walks through adding a declarative HTTP client to a Grails REST API using Spring Boot's built-in HTTP Services support: define a `@HttpExchange` interface, register it with `@ImportHttpServices`, inject the generated `RestClient` proxy into a Grails service, and expose results through JSON views. Local `RecordLabel` data stays in GORM/PostgreSQL; album metadata comes from the iTunes Search API.
+The guide walks through adding a declarative HTTP client to a Grails REST API using Spring Framework HTTP Services: define a `@HttpExchange` interface, register it with `@ImportHttpServices`, inject the generated `RestClient`-backed proxy into a Grails service, and expose results through JSON views. Local `RecordLabel` data stays in GORM/PostgreSQL; album metadata comes from the iTunes Search API.
 
-This approach uses the same Spring stack Grails 8 already runs on. No Micronaut plugin or extra HTTP client dependency is required.
+This uses the same Spring stack Grails 8 already runs on (Spring Framework 7 / Spring Boot 4). No Micronaut plugin is required. Add `spring-boot-starter-json` so the HTTP client can deserialize JSON responses.
 
 ## Layout
 
 | Directory | What it is |
 |-----------|------------|
 | `initial/` | Vanilla Grails 8 REST API starter from [start.grails.org](https://start.grails.org) (`postgres`, `testcontainers`, `spock`). Work through the guide starting here. |
-| `complete/` | The finished sample — `@HttpExchange` `ItunesClient`, `ItunesSearchService`, `RecordLabel` REST API, JSON views, and Spock unit + integration tests. |
+| `complete/` | The finished sample - `@HttpExchange` `ItunesClient`, `ItunesSearchService`, `RecordLabel` REST API, JSON views, and Spock unit + integration tests. |
 
 ## Running
 
@@ -37,15 +37,15 @@ cd grails-http-client/complete
 
 Example endpoints: `GET /api/recordLabels`, `GET /api/search?q=U2`.
 
-The integration spec (`RecordLabelIntegrationSpec`) asserts GORM persistence against a **real PostgreSQL database** (Testcontainers). `ItunesClientIntegrationSpec` verifies the `@HttpExchange` client is registered as a Spring bean.
+The integration spec (`RecordLabelIntegrationSpec`) asserts GORM persistence against a **real PostgreSQL database** (Testcontainers). `ItunesClientIntegrationSpec` registers the `@HttpExchange` client, calls `search()` against a MockWebServer stub, and verifies the encoded `term` query parameter plus JSON deserialization.
 
 Unit specs under `src/test/groovy/` cover domain constraints and service delegation to the HTTP client with mocks.
 
 ## Requirements
 
 - **JDK 21** (Temurin recommended; the Gradle build enforces Java 21+)
-- **Docker** running locally — required for `integrationTest` (Testcontainers PostgreSQL). Unit tests (`./gradlew test`) do not need Docker.
-- **PostgreSQL** on `localhost:5432` — required for `./gradlew bootRun` (default database `devDb` in `application.yml`)
+- **Docker** - required for `integrationTest` (Testcontainers PostgreSQL). Unit tests (`./gradlew test`) do not need Docker.
+- **PostgreSQL** on `localhost:5432` - required for `./gradlew bootRun` (default database `devDb` in `application.yml`)
 
 If Gradle reports *"Run this build using a Java 21 or newer JVM"*, your shell or IDE is still on an older JDK:
 
@@ -62,16 +62,38 @@ If `integrationTest` fails with a Testcontainers / `docker.sock` error, start Do
 ```groovy
 // 1. Register HTTP service interfaces on the application class:
 @ImportHttpServices(basePackages = 'example')
+@Import(ItunesClientConfiguration)
 class Application extends GrailsAutoConfiguration { ... }
 
 // 2. Declare a Spring HTTP service interface:
-@HttpExchange(url = 'https://itunes.apple.com')
+@HttpExchange
 interface ItunesClient {
     @GetExchange('/search?limit=25&media=music&entity=album&term={term}')
-    SearchResult search(String term)
+    SearchResult search(@PathVariable('term') String term)
 }
 
-// 3. Inject the client into a Grails service:
+// 3. Point RestClient at itunes.base-url and accept the iTunes API's
+//    text/javascript response as JSON (override the URL in tests with MockWebServer):
+private static final MediaType JAVASCRIPT = MediaType.parseMediaType('text/javascript')
+
+@Bean
+RestClientHttpServiceGroupConfigurer itunesBaseUrlConfigurer(
+        @Value('${itunes.base-url:https://itunes.apple.com}') String itunesBaseUrl) {
+    return { groups ->
+        groups.forEachClient { group, builder ->
+            builder.baseUrl(itunesBaseUrl)
+            builder.messageConverters { List<HttpMessageConverter<?>> converters ->
+                JacksonJsonHttpMessageConverter jacksonConverter =
+                        (JacksonJsonHttpMessageConverter) converters.find { HttpMessageConverter<?> converter ->
+                            converter instanceof JacksonJsonHttpMessageConverter
+                        }
+                jacksonConverter.supportedMediaTypes = jacksonConverter.supportedMediaTypes + JAVASCRIPT
+            }
+        }
+    }
+}
+
+// 4. Inject the client into a Grails service:
 @Autowired
 ItunesClient itunesClient
 
@@ -80,7 +102,7 @@ List<Album> searchAlbums(String searchTerm) {
 }
 ```
 
-Spring Boot auto-configures a `RestClient` proxy for the interface. No extra HTTP client dependency is required beyond the standard Grails `rest-api` profile.
+`@ImportHttpServices` (Spring Framework 7 / Spring Boot 4) scans for `@HttpExchange` interfaces and registers a `RestClient`-backed proxy bean for each one. `spring-boot-starter-json` provides the message converter used to deserialize JSON responses; `ItunesClientConfiguration` also allows the iTunes API's `text/javascript` content type.
 
 Controllers stay thin and delegate to services; JSON views under `grails-app/views/` shape REST responses.
 
