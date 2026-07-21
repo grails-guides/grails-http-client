@@ -1,0 +1,11 @@
+import example.RecordLabel
+
+model {
+    List<RecordLabel> recordLabelList
+    Integer recordLabelCount
+}
+
+json {
+    recordLabels g.render(recordLabelList, [includes: ['id', 'name']])
+    total recordLabelCount ?: recordLabelList.size()
+}
